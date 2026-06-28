@@ -6,7 +6,7 @@ import { MAPS, type MapMeta } from "./constants"
 import { hashStringToSeed, makeRng } from "./math"
 import type { MapId, Vec3 } from "./types"
 
-export type PropKind = "box" | "cylinder" | "table" | "shelf" | "plant" | "wall"
+export type PropKind = "box" | "cylinder" | "table" | "shelf" | "plant" | "wall" | "tree"
 
 export interface MapProp {
   id: number
@@ -77,7 +77,11 @@ export function generateMap(id: MapId): GeneratedMap {
       let kind: PropKind
       let size: Vec3
       let y: number
-      if (roll < 0.3) {
+      if (roll < 0.2) {
+        kind = "tree"
+        size = { x: 1.5, y: 3.5, z: 1.5 }
+        y = 1.75
+      } else if (roll < 0.35) {
         kind = "table"
         size = { x: 1.1, y: 0.45, z: 0.7 }
         y = 0.45

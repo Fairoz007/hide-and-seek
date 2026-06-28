@@ -1,14 +1,13 @@
-// Audio layer built on Howler. Synthesizes simple tones at runtime (so the
-// project ships with zero binary audio assets) for UI clicks, countdown beeps,
-// paint, footsteps, and victory stings, plus an ambient pad. Positional volume
-// is approximated by distance attenuation from the listener.
+// Audio layer built on Howler. Synthesizes simple tones and noise at runtime
+// for UI clicks, countdown beeps, paint, footsteps, and dynamic ambient pads.
+// Positional volume is approximated by distance attenuation from the listener.
 
 import { Howl, Howler } from "howler"
 
 type Sfx = "click" | "paint" | "footstep" | "countdown" | "victory" | "discover" | "scan"
 
 /** Generate a short WAV data URI for a tone so we need no asset files. */
-function tone(freq: number, ms: number, type: "sine" | "square" | "saw" = "sine", vol = 0.3): string {
+function tone(freq: number, ms: number, type: "sine" | "square" | "saw" | "noise" = "sine", vol = 0.3): string {
   const sampleRate = 22050
   const len = Math.floor((ms / 1000) * sampleRate)
   const buffer = new Uint8Array(44 + len * 2)
@@ -29,15 +28,31 @@ function tone(freq: number, ms: number, type: "sine" | "square" | "saw" = "sine"
   view.setUint16(34, 16, true)
   writeStr(36, "data")
   view.setUint32(40, len * 2, true)
+  
+  let lastNoise = 0
   for (let i = 0; i < len; i++) {
     const t = i / sampleRate
+    // Fade in/out envelope
     const env = Math.min(1, (len - i) / (sampleRate * 0.05)) * Math.min(1, i / (sampleRate * 0.005))
     let s: number
     const ph = freq * t
-    if (type === "square") s = Math.sign(Math.sin(ph * Math.PI * 2))
-    else if (type === "saw") s = 2 * (ph - Math.floor(ph + 0.5))
-    else s = Math.sin(ph * Math.PI * 2)
-    const v = s * env * vol
+    if (type === "square") {
+      s = Math.sign(Math.sin(ph * Math.PI * 2))
+    } else if (type === "saw") {
+      s = 2 * (ph - Math.floor(ph + 0.5))
+    } else if (type === "noise") {
+      // Brown noise approximation for wind/ambience
+      const white = Math.random() * 2 - 1
+      lastNoise = (lastNoise + (0.02 * white)) / 1.02
+      s = lastNoise * 3.5 // boost to match amplitude
+    } else {
+      s = Math.sin(ph * Math.PI * 2)
+    }
+    
+    // Add LFO for noise (wind gusts)
+    const lfo = type === "noise" ? (Math.sin(t * 0.5) * 0.5 + 0.5) * 0.6 + 0.4 : 1.0
+    const v = s * env * vol * lfo
+    
     view.setInt16(44 + i * 2, Math.max(-1, Math.min(1, v)) * 32767, true)
   }
   let binary = ""
@@ -48,6 +63,7 @@ function tone(freq: number, ms: number, type: "sine" | "square" | "saw" = "sine"
 export class AudioManager {
   private sounds: Record<Sfx, Howl>
   private ambient: Howl | null = null
+  private music: Howl | null = null
   private muted = false
 
   constructor() {
@@ -75,16 +91,38 @@ export class AudioManager {
     if (v > 0.02) this.play(name, v)
   }
 
-  startAmbient() {
+  startAmbient(type: "forest" | "city" = "forest") {
     if (this.ambient || this.muted) return
-    // Low sine pad loop.
-    this.ambient = new Howl({ src: [tone(110, 2000, "sine", 0.08)], loop: true, volume: 0.4 })
+    
+    if (type === "forest") {
+      // Noise buffer acts as wind/leaves rustling
+      this.ambient = new Howl({ src: [tone(0, 4000, "noise", 0.4)], loop: true, volume: 0.2 })
+    } else {
+      // Low rumble for city
+      this.ambient = new Howl({ src: [tone(60, 4000, "sine", 0.3)], loop: true, volume: 0.15 })
+    }
+    
     this.ambient.play()
+  }
+
+  startDynamicMusic() {
+    if (this.music || this.muted) return
+    // Dark, pulsing synth drone
+    this.music = new Howl({ src: [tone(110, 4000, "saw", 0.05)], loop: true, volume: 0.2 })
+    this.music.play()
+  }
+
+  setMusicIntensity(high: boolean) {
+    if (!this.music) return
+    // Fade volume up when intense (e.g. hunter nearby)
+    this.music.fade(this.music.volume(), high ? 0.4 : 0.2, 1000)
   }
 
   stopAmbient() {
     this.ambient?.stop()
     this.ambient = null
+    this.music?.stop()
+    this.music = null
   }
 
   setMuted(v: boolean) {

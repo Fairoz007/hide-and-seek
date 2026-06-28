@@ -14,6 +14,8 @@ export class HUD {
   private scanBtn!: HTMLButtonElement
   private hint!: HTMLElement
   private crosshair!: HTMLElement
+  private fpsCount!: HTMLElement
+  private pingCount!: HTMLElement
   private visible = false
 
   constructor() {
@@ -26,18 +28,24 @@ export class HUD {
     const wrap = document.createElement("div")
     wrap.className = "hud"
     wrap.innerHTML = `
+      <div class="hud-metrics">
+        <div>PING <b id="ping-count">--</b></div>
+        <div>FPS <b id="fps-count">--</b></div>
+      </div>
       <div class="hud-top">
-        <div class="hud-role role-${team}" id="role-tag">${team === "hunter" ? "HUNTER" : "MIMIC"}</div>
-        <div class="hud-timer" id="hud-timer">--:--</div>
-        <div class="hud-remaining">Mimics left: <b id="mimic-count">0</b></div>
+        <div class="hud-panel">
+          <div class="hud-role role-${team}" id="role-tag">${team === "hunter" ? "HUNTER" : "MIMIC"}</div>
+          <div class="hud-timer" id="hud-timer">--:--</div>
+          <div class="hud-remaining">Mimics left: <b id="mimic-count">0</b></div>
+        </div>
       </div>
 
       <div class="hud-bottom">
         ${
           team === "mimic"
             ? `<div class="camo-meter">
-                 <div class="camo-bar"><div class="camo-fill" id="camo-fill"></div></div>
                  <div class="camo-label" id="camo-label">Camo 0%</div>
+                 <div class="camo-bar"><div class="camo-fill" id="camo-fill"></div></div>
                </div>`
             : `<button class="btn scan-btn" id="scan-btn">SCAN <span class="scan-key">F</span></button>`
         }
@@ -61,6 +69,8 @@ export class HUD {
     this.mimicCount = wrap.querySelector("#mimic-count")!
     this.hint = wrap.querySelector("#hud-hint")!
     this.crosshair = wrap.querySelector("#crosshair")!
+    this.fpsCount = wrap.querySelector("#fps-count")!
+    this.pingCount = wrap.querySelector("#ping-count")!
   }
 
   unmount() {
@@ -81,6 +91,12 @@ export class HUD {
     this.camoFill.style.width = `${score}%`
     this.camoLabel.textContent = `Camo ${Math.round(score)}%`
     this.camoFill.classList.toggle("hidden-good", score >= 80)
+  }
+
+  setMetrics(fps: number, ping: number) {
+    if (!this.visible) return
+    this.fpsCount.textContent = Math.round(fps).toString()
+    this.pingCount.textContent = Math.round(ping).toString() + "ms"
   }
 
   setMimicCount(n: number) {

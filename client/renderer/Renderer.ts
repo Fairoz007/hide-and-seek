@@ -3,11 +3,15 @@
 // hardware via shadow tuning and capped pixel ratio.
 
 import * as THREE from "three"
+import { PostProcessing } from "./PostProcessing"
 
 export class Renderer {
   readonly renderer: THREE.WebGLRenderer
   readonly scene: THREE.Scene
   readonly camera: THREE.PerspectiveCamera
+  readonly postProcessing: PostProcessing
+  public usePostProcessing = true
+
   private hemi!: THREE.HemisphereLight
   private sun!: THREE.DirectionalLight
   private resizeHandler: () => void
@@ -15,13 +19,17 @@ export class Renderer {
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({
       canvas,
-      antialias: true,
+      antialias: false, // Disabled here because we use SMAA in post-processing
       powerPreference: "high-performance",
     })
+    
+    // AAA-quality setup
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     this.renderer.setSize(window.innerWidth, window.innerHeight)
     this.renderer.shadowMap.enabled = true
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap
+    
+    // Using physically correct lighting is default in newer Three.js (r169+)
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping
     this.renderer.toneMappingExposure = 1.05
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
@@ -33,6 +41,9 @@ export class Renderer {
     this.camera.position.set(0, 6, 10)
 
     this.setupLights()
+    
+    // Initialize Post-Processing Stack
+    this.postProcessing = new PostProcessing(this.renderer, this.scene, this.camera, window.innerWidth, window.innerHeight)
 
     this.resizeHandler = () => this.onResize()
     window.addEventListener("resize", this.resizeHandler)
@@ -42,18 +53,19 @@ export class Renderer {
     this.hemi = new THREE.HemisphereLight(0xcfe8ff, 0x2a2a30, 0.7)
     this.scene.add(this.hemi)
 
-    this.sun = new THREE.DirectionalLight(0xffffff, 1.6)
+    this.sun = new THREE.DirectionalLight(0xffffff, 4.0) // Increased for PBR realism
     this.sun.position.set(20, 30, 12)
     this.sun.castShadow = true
-    this.sun.shadow.mapSize.set(2048, 2048)
+    this.sun.shadow.mapSize.set(2048, 2048) // High-res shadows
     this.sun.shadow.camera.near = 1
-    this.sun.shadow.camera.far = 90
+    this.sun.shadow.camera.far = 150
     const s = 40
     this.sun.shadow.camera.left = -s
     this.sun.shadow.camera.right = s
     this.sun.shadow.camera.top = s
     this.sun.shadow.camera.bottom = -s
-    this.sun.shadow.bias = -0.0004
+    this.sun.shadow.bias = -0.0001
+    this.sun.shadow.normalBias = 0.02
     this.scene.add(this.sun)
     this.scene.add(this.sun.target)
   }
@@ -79,10 +91,15 @@ export class Renderer {
     this.camera.aspect = window.innerWidth / window.innerHeight
     this.camera.updateProjectionMatrix()
     this.renderer.setSize(window.innerWidth, window.innerHeight)
+    this.postProcessing.resize(window.innerWidth, window.innerHeight)
   }
 
   render() {
-    this.renderer.render(this.scene, this.camera)
+    if (this.usePostProcessing) {
+      this.postProcessing.render()
+    } else {
+      this.renderer.render(this.scene, this.camera)
+    }
   }
 
   dispose() {
