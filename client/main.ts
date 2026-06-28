@@ -12,6 +12,7 @@ import { LightingManager } from "./engine/LightingManager"
 import { MaterialManager } from "./engine/MaterialManager"
 import { ParticleSystem } from "./engine/ParticleSystem"
 import { FoliageSystem } from "./engine/FoliageSystem"
+import { WaterSystem } from "./engine/WaterSystem"
 import { AudioManager } from "./audio/AudioManager"
 import { generateMap, GeneratedMap } from "@shared/mapgen"
 import type { PlayerProfile } from "./cosmetics/catalog"
@@ -35,9 +36,13 @@ const mapBuilder = new MapBuilder(foliageSystem)
 const envManager = new EnvironmentManager(renderer.scene, renderer.renderer)
 envManager.generateProceduralEnvironment() // Use PMREM for realistic IBL reflections
 const lightManager = new LightingManager(renderer.scene)
+const waterSystem = new WaterSystem(renderer.scene, renderer.sun)
 
-// Example: Ambient dust particles for cinematic atmosphere
+// AAA Particle Effects
 const dustParticles = new ParticleSystem(renderer.scene, 500, "dust")
+const leafParticles = new ParticleSystem(renderer.scene, 200, "leaves")
+const fireflyParticles = new ParticleSystem(renderer.scene, 100, "fireflies")
+const butterflyParticles = new ParticleSystem(renderer.scene, 50, "butterflies")
 
 
 let currentProfile: PlayerProfile = {
@@ -334,7 +339,11 @@ const loop = new Loop(
     
     // Always update ambient effects
     dustParticles.update(dt)
+    leafParticles.update(dt)
+    fireflyParticles.update(dt)
+    butterflyParticles.update(dt)
     foliageSystem.update(dt)
+    waterSystem.update(dt)
   },
   () => {
     renderer.render()

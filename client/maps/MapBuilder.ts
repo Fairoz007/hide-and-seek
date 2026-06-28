@@ -31,34 +31,75 @@ export class MapBuilder {
     return this.group
   }
 
+  private generateTerrainTexture(baseColorHex: number): THREE.CanvasTexture {
+    const canvas = document.createElement('canvas')
+    canvas.width = 512
+    canvas.height = 512
+    const ctx = canvas.getContext('2d')!
+    
+    // Base color
+    ctx.fillStyle = '#' + baseColorHex.toString(16).padStart(6, '0')
+    ctx.fillRect(0, 0, 512, 512)
+    
+    // Generate simple noise
+    const imgData = ctx.getImageData(0, 0, 512, 512)
+    const data = imgData.data
+    for (let i = 0; i < data.length; i += 4) {
+      const noise = (Math.random() - 0.5) * 40
+      data[i] = Math.max(0, Math.min(255, data[i] + noise))
+      data[i+1] = Math.max(0, Math.min(255, data[i+1] + noise))
+      data[i+2] = Math.max(0, Math.min(255, data[i+2] + noise))
+    }
+    ctx.putImageData(imgData, 0, 0)
+    
+    const texture = new THREE.CanvasTexture(canvas)
+    texture.wrapS = THREE.RepeatWrapping
+    texture.wrapT = THREE.RepeatWrapping
+    texture.repeat.set(16, 16)
+    texture.colorSpace = THREE.SRGBColorSpace
+    return texture
+  }
+
   private buildFloor(map: GeneratedMap) {
     const size = map.half * 2
     
     // Create a terrain with more geometry for displacement/bump in PBR
-    const geo = new THREE.PlaneGeometry(size, size, 64, 64)
+    const geo = new THREE.PlaneGeometry(size, size, 128, 128)
     
     // Rough procedural bump for terrain
+    // Rough procedural bump for terrain: rolling hills
     const pos = geo.attributes.position
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i)
       const y = pos.getY(i)
-      // Slight bumpiness
-      const z = Math.sin(x * 0.5) * Math.cos(y * 0.5) * 0.2
+      // Compound noise for realistic rolling hills and uneven ground
+      let z = Math.sin(x * 0.05) * Math.cos(y * 0.05) * 4.0 + 
+              Math.sin(x * 0.15) * Math.cos(y * 0.15) * 1.5 +
+              Math.sin(x * 0.5) * Math.cos(y * 0.5) * 0.2
+      // Flatten the center area slightly for gameplay
+      const distToCenter = Math.hypot(x, y)
+      if (distToCenter < 20) {
+        z *= distToCenter / 20
+      }
       pos.setZ(i, z)
     }
     geo.computeVertexNormals()
 
+    const terrainTex = this.generateTerrainTexture(map.floorColor)
+
     const mat = new THREE.MeshStandardMaterial({ 
-      color: map.floorColor, 
-      roughness: 0.9,
-      metalness: 0.05
+      map: terrainTex,
+      roughness: 0.95,
+      metalness: 0.02
     })
     
     const floor = new THREE.Mesh(geo, mat)
     floor.rotation.x = -Math.PI / 2
     floor.receiveShadow = true
     this.group.add(floor)
+    
     this.disposables.push(geo, mat)
+    this.disposables.push(terrainTex as unknown as { dispose: () => void })
   }
 
   private geometryFor(kind: PropKind): THREE.BufferGeometry {
@@ -75,37 +116,84 @@ export class MapBuilder {
         g2.translate(0, 2.2, 0)
         const g3 = new THREE.ConeGeometry(0.8, 1.5, 12)
         g3.translate(0, 3.2, 0)
-        
-        const treeGeo = new THREE.BufferGeometry()
-        const positions = new Float32Array([
-          ...g1.attributes.position.array,
-          ...g2.attributes.position.array,
-          ...g3.attributes.position.array
-        ])
-        const normals = new Float32Array([
-          ...g1.attributes.normal.array,
-          ...g2.attributes.normal.array,
-          ...g3.attributes.normal.array
-        ])
-        
-        const indices = []
-        let offset = 0
-        for (const g of [g1, g2, g3]) {
-          const arr = g.getIndex()!.array
-          for (let i = 0; i < arr.length; i++) {
-            indices.push(arr[i] + offset)
-          }
-          offset += g.attributes.position.count
-        }
-        
-        treeGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3))
-        treeGeo.setAttribute('normal', new THREE.BufferAttribute(normals, 3))
-        treeGeo.setIndex(indices)
-        return treeGeo
+        return this.mergeGeometries([g1, g2, g3])
       default:
-        // Beveled box for premium look instead of sharp BoxGeometry
-        return new THREE.BoxGeometry(2, 2, 2, 4, 4, 4)
+        // Procedural AAA Building Geometry instead of a simple cube
+        return this.generateBuildingGeo()
     }
+  }
+
+  private mergeGeometries(geometries: THREE.BufferGeometry[]): THREE.BufferGeometry {
+    const merged = new THREE.BufferGeometry()
+    let positionCount = 0
+    let normalCount = 0
+    let indexCount = 0
+    let uvCount = 0
+    
+    geometries.forEach(g => {
+      positionCount += g.attributes.position.array.length
+      if (g.attributes.normal) normalCount += g.attributes.normal.array.length
+      if (g.attributes.uv) uvCount += g.attributes.uv.array.length
+      if (g.getIndex()) indexCount += g.getIndex()!.array.length
+    })
+
+    const positions = new Float32Array(positionCount)
+    const normals = new Float32Array(normalCount)
+    const uvs = new Float32Array(uvCount)
+    const indices = []
+
+    let pOffset = 0, nOffset = 0, uOffset = 0, iOffset = 0, vOffset = 0
+    
+    for (const g of geometries) {
+      positions.set(g.attributes.position.array, pOffset)
+      pOffset += g.attributes.position.array.length
+      
+      if (g.attributes.normal) {
+        normals.set(g.attributes.normal.array, nOffset)
+        nOffset += g.attributes.normal.array.length
+      }
+      
+      if (g.attributes.uv) {
+        uvs.set(g.attributes.uv.array, uOffset)
+        uOffset += g.attributes.uv.array.length
+      }
+      
+      const idx = g.getIndex()
+      if (idx) {
+        for (let i = 0; i < idx.array.length; i++) {
+          indices.push(idx.array[i] + vOffset)
+        }
+      }
+      vOffset += g.attributes.position.count
+    }
+
+    merged.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+    if (normalCount > 0) merged.setAttribute('normal', new THREE.BufferAttribute(normals, 3))
+    if (uvCount > 0) merged.setAttribute('uv', new THREE.BufferAttribute(uvs, 2))
+    merged.setIndex(indices)
+    return merged
+  }
+
+  private generateBuildingGeo(): THREE.BufferGeometry {
+    // Wall Base
+    const wallGeo = new THREE.BoxGeometry(2, 2, 2)
+    
+    // Sloped Roof
+    const roofGeo = new THREE.ConeGeometry(1.6, 1.2, 4)
+    roofGeo.rotateY(Math.PI / 4)
+    roofGeo.translate(0, 1.6, 0)
+    
+    // Door
+    const doorGeo = new THREE.BoxGeometry(0.5, 1, 0.1)
+    doorGeo.translate(0, -0.5, 1.0)
+    
+    // Window
+    const winGeo = new THREE.BoxGeometry(0.6, 0.6, 0.1)
+    winGeo.translate(0.5, 0.2, 1.0)
+    const winGeo2 = winGeo.clone()
+    winGeo2.translate(-1.0, 0, 0)
+    
+    return this.mergeGeometries([wallGeo, roofGeo, doorGeo, winGeo, winGeo2])
   }
 
   private buildProps(map: GeneratedMap) {

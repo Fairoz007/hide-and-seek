@@ -13,7 +13,7 @@ export class Renderer {
   public usePostProcessing = true
 
   private hemi!: THREE.HemisphereLight
-  private sun!: THREE.DirectionalLight
+  public sun!: THREE.DirectionalLight
   private resizeHandler: () => void
 
   constructor(canvas: HTMLCanvasElement) {
@@ -56,7 +56,7 @@ export class Renderer {
     this.sun = new THREE.DirectionalLight(0xffffff, 4.0) // Increased for PBR realism
     this.sun.position.set(20, 30, 12)
     this.sun.castShadow = true
-    this.sun.shadow.mapSize.set(2048, 2048) // High-res shadows
+    this.sun.shadow.mapSize.set(1024, 1024) // Optimized for 60fps
     this.sun.shadow.camera.near = 1
     this.sun.shadow.camera.far = 150
     const s = 40
