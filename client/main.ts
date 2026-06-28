@@ -8,6 +8,7 @@ import { Character } from "./characters/Character"
 import { MapBuilder } from "./maps/MapBuilder"
 import { ThirdPersonCamera } from "./renderer/ThirdPersonCamera"
 import { EnvironmentManager } from "./engine/EnvironmentManager"
+import { LightingManager } from "./engine/LightingManager"
 import { MaterialManager } from "./engine/MaterialManager"
 import { ParticleSystem } from "./engine/ParticleSystem"
 import { FoliageSystem } from "./engine/FoliageSystem"
@@ -22,6 +23,7 @@ import type { Pose } from "@shared/types"
 const canvas = document.getElementById("game-canvas") as HTMLCanvasElement
 const renderer = new Renderer(canvas)
 const ui = new UI()
+const hud = new HUD()
 const net = new NetClient()
 const input = new Input(canvas)
 const audio = new AudioManager()
