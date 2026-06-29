@@ -5,6 +5,7 @@
 import * as THREE from "three"
 import { unpackColor } from "@shared/math"
 import type { CamoRegions, Pose } from "@shared/types"
+import { AssetManager } from "../engine/AssetManager"
 
 export type AnimState = "idle" | "walk" | "run" | "paint" | "celebrate"
 
@@ -23,6 +24,11 @@ export class Character {
   private state: AnimState = "idle"
   private pose: Pose = "stand"
   private targetScaleY = 1
+  
+  private mixer: THREE.AnimationMixer | null = null
+  private externalModel: THREE.Object3D | null = null
+  private currentAction: THREE.AnimationAction | null = null
+  private proceduralParts: THREE.Object3D[] = []
 
   constructor() {
     this.torsoMat = mat(0xf5f5f5)
@@ -30,11 +36,12 @@ export class Character {
     this.limbMat = mat(0xe8e8e8)
 
     // Rounded torso — a slightly squashed sphere.
-    const torsoGeo = new THREE.SphereGeometry(0.45, 24, 20)
+    const torsoGeo = new THREE.SphereGeometry(0.45, 64, 64)
     this.body = new THREE.Mesh(torsoGeo, this.torsoMat)
     this.body.scale.set(1, 1.15, 0.9)
     this.body.position.y = 0.6
     this.body.castShadow = true
+    this.body.receiveShadow = true
     this.group.add(this.body)
 
     // Head with cartoon eyes.
@@ -55,12 +62,36 @@ export class Character {
     this.legR = this.buildLimb(0.15, 0.45)
     this.legR.position.set(0.18, 0.4, 0)
     this.group.add(this.legR)
+    
+    this.proceduralParts.push(this.body, this.head, this.armL, this.armR, this.legL, this.legR)
+  }
+
+  public async loadModel() {
+    const assets = AssetManager.getInstance()
+    const model = await assets.loadModel("/assets/character.glb")
+    
+    if (model) {
+      // Hide procedural parts
+      for (const p of this.proceduralParts) p.visible = false
+      
+      this.externalModel = model
+      // Adjust scale if needed for external models, assuming 1 unit = 1 meter
+      this.externalModel.scale.setScalar(0.8) 
+      this.group.add(this.externalModel)
+      
+      // Try to find animations in the model's userData (if set up by the loader)
+      // or we just set up a basic mixer. 
+      // (Advanced GLTF animations would require passing the raw GLTF object from AssetManager,
+      // but for this fallback we will just prepare the mixer).
+      this.mixer = new THREE.AnimationMixer(this.externalModel)
+    }
   }
 
   private buildHead(): THREE.Group {
     const g = new THREE.Group()
-    const skull = new THREE.Mesh(new THREE.SphereGeometry(0.32, 24, 20), this.headMat)
+    const skull = new THREE.Mesh(new THREE.SphereGeometry(0.32, 64, 64), this.headMat)
     skull.castShadow = true
+    skull.receiveShadow = true
     g.add(skull)
 
     const eyeWhiteGeo = new THREE.SphereGeometry(0.11, 16, 12)
@@ -79,10 +110,11 @@ export class Character {
 
   private buildLimb(radius: number, length: number): THREE.Group {
     const g = new THREE.Group()
-    const geo = new THREE.CapsuleGeometry(radius, length, 6, 12)
+    const geo = new THREE.CapsuleGeometry(radius, length, 16, 32)
     const mesh = new THREE.Mesh(geo, this.limbMat)
     mesh.position.y = -length / 2
     mesh.castShadow = true
+    mesh.receiveShadow = true
     g.add(mesh)
     return g
   }
@@ -159,6 +191,10 @@ export class Character {
       this.armR.rotation.x *= 0.85
       this.group.position.y *= 0.85
     }
+    
+    if (this.mixer) {
+      this.mixer.update(dt)
+    }
   }
 
   dispose() {
@@ -174,5 +210,12 @@ export class Character {
 }
 
 function mat(color: number) {
-  return new THREE.MeshStandardMaterial({ color, roughness: 0.75, metalness: 0.05 })
+  // Use PhysicalMaterial for AAA soft rubber-like finish
+  return new THREE.MeshPhysicalMaterial({ 
+    color, 
+    roughness: 0.6, 
+    metalness: 0.05,
+    clearcoat: 0.1, // Subtle reflections
+    clearcoatRoughness: 0.8
+  })
 }

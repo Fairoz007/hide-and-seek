@@ -46,7 +46,10 @@ export class ThirdPersonCamera {
   update(dt: number, target: THREE.Vector3, sprinting: boolean, colliders: THREE.Box3[]) {
     this.distance = damp(this.distance, this.targetDistance, 10, dt)
 
-    const focus = this.tmp.set(target.x, target.y + 1.4, target.z)
+    // Shoulder offset for AAA cinematic feel
+    const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw))
+    const focus = this.tmp.set(target.x, target.y + 1.4, target.z).addScaledVector(right, 0.6)
+    
     const dir = new THREE.Vector3(
       Math.sin(this.yaw) * Math.cos(this.pitch),
       Math.sin(this.pitch),
@@ -75,8 +78,15 @@ export class ThirdPersonCamera {
       this.shake *= Math.exp(-6 * dt)
     }
 
-    this.camera.position.lerp(camPos, 1 - Math.exp(-16 * dt))
-    this.camera.lookAt(focus)
+    // Heavy lerp for cinematic camera lag
+    this.camera.position.lerp(camPos, 1 - Math.exp(-12 * dt))
+    
+    // Look past the player slightly to prevent the player model from completely blocking the center
+    const lookAtTarget = focus.clone().addScaledVector(dir, -4.0)
+    
+    // Smoothly rotate the camera instead of snapping instantly
+    const targetQuat = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(this.camera.position, lookAtTarget, this.camera.up))
+    this.camera.quaternion.slerp(targetQuat, 1 - Math.exp(-15 * dt))
 
     // Dynamic FOV.
     const targetFov = sprinting ? this.baseFov + 8 : this.baseFov

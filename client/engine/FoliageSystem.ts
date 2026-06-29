@@ -1,5 +1,6 @@
 import * as THREE from "three"
 import { OptimizationManager } from "./OptimizationManager"
+import { AssetManager } from "./AssetManager"
 
 export class FoliageSystem {
   public windMaterials: THREE.Material[] = []
@@ -9,10 +10,17 @@ export class FoliageSystem {
   /**
    * Generates a dense field of instanced grass.
    */
-  public generateGrassField(bounds: number, density: number): THREE.InstancedMesh {
-    // Cross-plane geometry for realistic grass instead of a cone
-    const grassGeo = new THREE.PlaneGeometry(0.8, 1.2, 2, 4)
-    grassGeo.translate(0, 0.6, 0)
+  public async generateGrassField(bounds: number, density: number): Promise<THREE.InstancedMesh> {
+    const assets = AssetManager.getInstance()
+    const model = await assets.loadModel("/assets/grass.glb")
+    
+    let mergedGeo: THREE.BufferGeometry
+    if (model) {
+      mergedGeo = assets.extractGeometry(model) || new THREE.PlaneGeometry(0.8, 1.2)
+    } else {
+      // Fallback Procedural Grass
+      const grassGeo = new THREE.PlaneGeometry(0.8, 1.2, 2, 4)
+      grassGeo.translate(0, 0.6, 0)
     
     // Create cross planes
     const geo2 = grassGeo.clone()
@@ -50,9 +58,10 @@ export class FoliageSystem {
     }
     
     mergedGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3))
-    mergedGeo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2))
-    mergedGeo.setIndex(indices)
-    mergedGeo.computeVertexNormals()
+      mergedGeo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2))
+      mergedGeo.setIndex(indices)
+      mergedGeo.computeVertexNormals()
+    }
 
     const grassMat = new THREE.MeshStandardMaterial({
       color: 0x4a7c59,
@@ -85,21 +94,67 @@ export class FoliageSystem {
     return mesh
   }
 
-  /**
-   * Generates a dense forest of trees.
-   */
-  public generateForest(bounds: number, count: number): THREE.Group {
+  public async generateForest(bounds: number, count: number): Promise<THREE.Group> {
     const group = new THREE.Group()
+    const assets = AssetManager.getInstance()
+    const loadedTree = await assets.loadModel("/assets/tree.glb")
 
-    const trunkGeo = new THREE.CylinderGeometry(0.4, 0.6, 3, 8)
-    trunkGeo.translate(0, 1.5, 0)
-    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x4a3b32, roughness: 0.9 })
-
-    const leavesGeo = new THREE.SphereGeometry(2.5, 12, 12)
-    leavesGeo.translate(0, 4, 0)
-    const leavesMat = new THREE.MeshStandardMaterial({ color: 0x2d5a27, roughness: 0.8 })
+    let trunkGeo: THREE.BufferGeometry
+    let leavesGeo: THREE.BufferGeometry
     
-    this.addWindShader(leavesMat, 1.5, 0.05, false)
+    if (loadedTree) {
+       // We assume the asset tree has one mesh or we just extract the first one for instancing.
+       // In a real AAA pipeline, the tree asset would be split into trunk/leaves for instancing, 
+       // but for this fallback we'll extract the first geometry as trunk and skip leaves to avoid breaking.
+       trunkGeo = assets.extractGeometry(loadedTree) || new THREE.CylinderGeometry(0.5, 0.7)
+       leavesGeo = new THREE.BufferGeometry() // Empty so it doesn't render procedurally
+    } else {
+      trunkGeo = new THREE.CylinderGeometry(0.5, 0.7, 4, 12)
+      trunkGeo.translate(0, 2, 0)
+    }
+    
+    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x3d2817, roughness: 0.95, bumpScale: 0.1 })
+
+    // Procedural Pine Leaves (Layered Cones)
+    if (!loadedTree) {
+      const pineGeo1 = new THREE.ConeGeometry(3, 4, 12)
+    pineGeo1.translate(0, 4, 0)
+    const pineGeo2 = new THREE.ConeGeometry(2.5, 3.5, 12)
+    pineGeo2.translate(0, 6, 0)
+    const pineGeo3 = new THREE.ConeGeometry(1.8, 3, 12)
+    pineGeo3.translate(0, 8, 0)
+    
+    // Merge pine layers manually (basic merge for instancing)
+    const leavesGeo = new THREE.BufferGeometry()
+    const p1 = pineGeo1.attributes.position.array
+    const p2 = pineGeo2.attributes.position.array
+    const p3 = pineGeo3.attributes.position.array
+    const combinedPositions = new Float32Array([...p1, ...p2, ...p3])
+    leavesGeo.setAttribute('position', new THREE.BufferAttribute(combinedPositions, 3))
+    
+    // Combine normals
+    const n1 = pineGeo1.attributes.normal.array
+    const n2 = pineGeo2.attributes.normal.array
+    const n3 = pineGeo3.attributes.normal.array
+    const combinedNormals = new Float32Array([...n1, ...n2, ...n3])
+    leavesGeo.setAttribute('normal', new THREE.BufferAttribute(combinedNormals, 3))
+    
+    // Combine indices
+    const indices = []
+    let offset = 0
+    for (const g of [pineGeo1, pineGeo2, pineGeo3]) {
+      const idx = g.getIndex()!.array
+      for (let i = 0; i < idx.length; i++) {
+        indices.push(idx[i] + offset)
+      }
+      offset += g.attributes.position.count
+    }
+    leavesGeo.setIndex(indices)
+    } // End of !loadedTree block
+    
+    const leavesMat = new THREE.MeshStandardMaterial({ color: 0x1f3d23, roughness: 0.9 })
+    
+    this.addWindShader(leavesMat, 1.2, 0.1, false)
 
     const trunkInstances = []
     const leavesInstances = []
@@ -122,10 +177,12 @@ export class FoliageSystem {
     }
 
     const trunkMesh = OptimizationManager.createInstancedMesh(trunkGeo, trunkMat, trunkInstances, true, true)
-    const leavesMesh = OptimizationManager.createInstancedMesh(leavesGeo, leavesMat, leavesInstances, true, true)
-
     group.add(trunkMesh)
-    group.add(leavesMesh)
+
+    if (!loadedTree) {
+      const leavesMesh = OptimizationManager.createInstancedMesh(leavesGeo, leavesMat, leavesInstances, true, true)
+      group.add(leavesMesh)
+    }
     
     // AAA Detail: Add fallen leaves and small rocks around trees
     const leafGeo = new THREE.PlaneGeometry(0.3, 0.3)
@@ -184,8 +241,13 @@ export class FoliageSystem {
   /**
    * Generates AAA quality bushes and shrubs.
    */
-  public generateBushes(bounds: number, count: number): THREE.InstancedMesh {
-    const bushGeo = new THREE.DodecahedronGeometry(1.2, 1)
+  public async generateBushes(bounds: number, count: number): Promise<THREE.InstancedMesh> {
+    const assets = AssetManager.getInstance()
+    const model = await assets.loadModel("/assets/bush.glb")
+    
+    let bushGeo = model ? assets.extractGeometry(model) : null
+    if (!bushGeo) bushGeo = new THREE.DodecahedronGeometry(1.2, 1)
+
     const bushMat = new THREE.MeshStandardMaterial({ color: 0x3a5f2b, roughness: 0.9 })
     
     this.addWindShader(bushMat, 2.0, 0.03, false)
@@ -210,9 +272,16 @@ export class FoliageSystem {
   /**
    * Generates scattered flowers.
    */
-  public generateFlowers(bounds: number, count: number): THREE.InstancedMesh {
-    const flowerGeo = new THREE.PlaneGeometry(0.4, 0.4)
-    flowerGeo.translate(0, 0.2, 0)
+  public async generateFlowers(bounds: number, count: number): Promise<THREE.InstancedMesh> {
+    const assets = AssetManager.getInstance()
+    const model = await assets.loadModel("/assets/flower.glb")
+    
+    let mergedGeo: THREE.BufferGeometry
+    if (model && assets.extractGeometry(model)) {
+       mergedGeo = assets.extractGeometry(model)!
+    } else {
+      const flowerGeo = new THREE.PlaneGeometry(0.4, 0.4)
+      flowerGeo.translate(0, 0.2, 0)
     
     // Cross planes for flowers
     const geo2 = flowerGeo.clone()
@@ -231,9 +300,10 @@ export class FoliageSystem {
       offset += g.attributes.position.count
     }
     mergedGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3))
-    mergedGeo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2))
-    mergedGeo.setIndex(indices)
-    mergedGeo.computeVertexNormals()
+      mergedGeo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2))
+      mergedGeo.setIndex(indices)
+      mergedGeo.computeVertexNormals()
+    }
 
     const flowerMat = new THREE.MeshStandardMaterial({
       color: 0xff66bb, // Pinkish

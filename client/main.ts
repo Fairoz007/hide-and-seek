@@ -120,7 +120,7 @@ net.on("match:countdown", (seconds) => {
   if (seconds > 0) audio.play("countdown")
 })
 
-net.on("match:started", (room) => {
+net.on("match:started", async (room) => {
   inMatch = true
   ui.clear()
   
@@ -132,7 +132,7 @@ net.on("match:started", (room) => {
   })
   
   map = generateMap(room.config.map)
-  const mapGroup = mapBuilder.build(map)
+  const mapGroup = await mapBuilder.build(map)
   renderer.scene.add(mapGroup)
   
   // Use cinematic volumetric fog from EnvironmentManager
@@ -142,15 +142,16 @@ net.on("match:started", (room) => {
   audio.startAmbient("forest")
   audio.startDynamicMusic()
 
-  room.players.forEach(p => {
+  await Promise.all(room.players.map(async p => {
     const char = new Character()
+    await char.loadModel()
     char.group.position.copy(p.position)
     char.group.rotation.y = p.rotationY
     char.applyCamo(p.camo)
     renderer.scene.add(char.group)
     char.group.userData = { id: p.id } // For tagging
     characters.set(p.id, char)
-  })
+  }))
 })
 
 net.on("world:snapshot", (snap) => {
