@@ -4,6 +4,7 @@ import { Events, WorldSnapshot, PlayerSnapshot, MoveInput } from "@shadow-seek/s
 import { InputController } from "../input/InputController.js"
 import { TilemapLoader } from "../maps/TilemapLoader.js"
 import { EffectsBridge } from "../renderer/EffectsBridge.js"
+import { UIManager } from "../ui/UIManager.js"
 
 const BASE_SPEED = 200
 const SPRINT_SPEED = 350
@@ -13,6 +14,7 @@ export class GameScene extends Scene {
   private socket!: Socket
   private inputController!: InputController
   private effectsBridge!: EffectsBridge
+  private uiManager!: UIManager
   
   private localPlayerSprite?: Phaser.GameObjects.Arc
   private remotePlayers: Map<string, Phaser.GameObjects.Arc> = new Map()
@@ -29,6 +31,7 @@ export class GameScene extends Scene {
     this.socket = this.registry.get("socket")
     this.inputController = new InputController(this)
     this.effectsBridge = new EffectsBridge()
+    this.uiManager = new UIManager()
     
     // Load Map
     TilemapLoader.loadMap(this)
@@ -41,7 +44,21 @@ export class GameScene extends Scene {
         this.snapshots.shift()
       }
       this.reconcileLocalPlayer(snapshot)
+      
+      // Update UI
+      if (snapshot.roundState) {
+        const mySnapshot = snapshot.players.find(p => p.id === this.socket.id)
+        this.uiManager.updateState(snapshot.roundState, snapshot.countdownSeconds, snapshot.winner, mySnapshot?.role)
+      }
     })
+    this.scale.on('resize', (gameSize: Phaser.Structs.Size) => {
+      this.effectsBridge.resize(gameSize.width, gameSize.height)
+    })
+  }
+
+  shutdown() {
+    this.uiManager.destroy()
+    this.scale.off('resize')
   }
 
   update(_time: number, delta: number) {
@@ -49,7 +66,12 @@ export class GameScene extends Scene {
     this.interpolateRemotePlayers(Date.now())
     
     // Sync Camera for Three.js
-    this.effectsBridge.syncCamera(this.cameras.main.scrollX, this.cameras.main.scrollY)
+    this.effectsBridge.syncCamera(
+      this.cameras.main.scrollX, 
+      this.cameras.main.scrollY,
+      this.cameras.main.width,
+      this.cameras.main.height
+    )
     
     // Render Three.js overlay
     this.effectsBridge.render()
@@ -93,6 +115,9 @@ export class GameScene extends Scene {
     this.localPlayerSprite.x = mySnapshot.x
     this.localPlayerSprite.y = mySnapshot.y
 
+    // Update Color based on role
+    this.updateSpriteColor(this.localPlayerSprite, mySnapshot)
+
     this.pendingInputs = this.pendingInputs.filter(input => input.sequence > mySnapshot.lastProcessedInput)
 
     const replayDt = 1 / 60 
@@ -134,6 +159,7 @@ export class GameScene extends Scene {
             this.remotePlayers.set(p1.id, sprite)
           }
           sprite.setPosition(x, y)
+          this.updateSpriteColor(sprite, p1)
 
           // Update 3D light for remote player
           this.effectsBridge.updatePlayerLight(p1.id, x, y)
@@ -149,6 +175,16 @@ export class GameScene extends Scene {
           this.effectsBridge.removePlayerLight(id)
         }
       }
+    }
+  }
+
+  private updateSpriteColor(sprite: Phaser.GameObjects.Arc, p: PlayerSnapshot) {
+    if (p.isAlive === false || p.role === "spectator") {
+      sprite.setFillStyle(0x888888, 0.5)
+    } else if (p.role === "seeker") {
+      sprite.setFillStyle(0xff0000, 1)
+    } else if (p.role === "hider") {
+      sprite.setFillStyle(0x00ff00, 1)
     }
   }
 

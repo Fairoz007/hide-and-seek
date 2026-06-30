@@ -4,7 +4,7 @@ import { Server } from "socket.io"
 import { Events, roomCreateSchema, roomJoinSchema, moveInputSchema } from "@shadow-seek/shared"
 import { RoomManager } from "./rooms/RoomManager.js"
 
-const PORT = process.env.PORT || 3001
+const PORT = process.env.PORT || 4001
 
 const app = express()
 app.get("/health", (_req, res) => {

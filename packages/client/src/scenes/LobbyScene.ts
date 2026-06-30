@@ -1,6 +1,6 @@
 import { Scene } from "phaser"
 import { Socket } from "socket.io-client"
-import { RoomState, Player } from "@shadow-seek/shared"
+import { RoomState, Player, Events } from "@shadow-seek/shared"
 
 export class LobbyScene extends Scene {
   private socket!: Socket
@@ -27,11 +27,20 @@ export class LobbyScene extends Scene {
     })
 
     // Listen for room state updates
-    this.socket.on("room:state", (state: RoomState) => {
+    this.socket.on(Events.ROOM_STATE, (state: RoomState) => {
       if (state.state === "ACTIVE" || state.state === "COUNTDOWN") {
         this.scene.start("GameScene")
       } else {
         this.updateLobby(state)
+      }
+    })
+
+    // Automatically create a room when entering Lobby for now
+    this.socket.emit(Events.ROOM_CREATE, { name: "Player1" }, (response: any) => {
+      if (response.success) {
+        console.log("Joined room:", response.roomId)
+      } else {
+        console.error("Failed to create room:", response.error)
       }
     })
   }

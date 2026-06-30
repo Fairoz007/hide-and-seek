@@ -9,10 +9,11 @@ export default defineConfig({
   },
   server: {
     host: true,
-    port: 3000,
+    port: 4000,
+    strictPort: true,
     proxy: {
       "/socket.io": {
-        target: "http://localhost:3001",
+        target: "http://localhost:4001",
         ws: true,
         changeOrigin: true,
       },

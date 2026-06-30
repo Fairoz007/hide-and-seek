@@ -11,22 +11,16 @@ const socket: Socket = io()
 
 socket.on("connect", () => {
   console.log("Connected to server:", socket.id)
-  
-  // For demonstration: automatically create a room when connecting
-  socket.emit(Events.ROOM_CREATE, { name: "Player1" }, (response: any) => {
-    if (response.success) {
-      console.log("Joined room:", response.roomId)
-    } else {
-      console.error("Failed to create room:", response.error)
-    }
-  })
 })
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
-  width: 1280,
-  height: 720,
-  parent: "app",
+  scale: {
+    mode: Phaser.Scale.RESIZE,
+    parent: "app",
+    width: "100%",
+    height: "100%"
+  },
   backgroundColor: "#0d1117",
   scene: [BootScene, LobbyScene, GameScene],
   physics: {

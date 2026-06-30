@@ -13,15 +13,16 @@ export class EffectsBridge {
     
     // We make alpha true so Phaser is visible underneath!
     this.renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true })
-    this.renderer.setSize(1280, 720)
+    this.renderer.setSize(window.innerWidth, window.innerHeight)
+    this.renderer.setPixelRatio(window.devicePixelRatio)
     
     // Important: let pointer events pass through to Phaser
     canvas.style.pointerEvents = "none"
 
     this.scene = new THREE.Scene()
     
-    // Orthographic camera matching our 1280x720 Phaser resolution
-    this.camera = new THREE.OrthographicCamera(0, 1280, 0, 720, 0.1, 1000)
+    // Orthographic camera matching our screen resolution
+    this.camera = new THREE.OrthographicCamera(0, window.innerWidth, 0, window.innerHeight, 0.1, 1000)
     this.camera.position.z = 100
 
     this.setupWarehousePreset()
@@ -56,12 +57,17 @@ export class EffectsBridge {
   }
 
   // Called every frame from Phaser update loop
-  syncCamera(scrollX: number, scrollY: number) {
+  syncCamera(scrollX: number, scrollY: number, width: number, height: number) {
     this.camera.left = scrollX
-    this.camera.right = scrollX + 1280
+    this.camera.right = scrollX + width
     this.camera.top = scrollY
-    this.camera.bottom = scrollY + 720
+    this.camera.bottom = scrollY + height
     this.camera.updateProjectionMatrix()
+  }
+
+  resize(width: number, height: number) {
+    this.renderer.setSize(width, height)
+    // The camera projection will be updated in syncCamera next frame
   }
 
   updatePlayerLight(id: string, x: number, y: number) {
