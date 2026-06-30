@@ -27,3 +27,17 @@ export interface MoveInput {
   sequence: number
   timestamp: number
 }
+
+export interface PlayerSnapshot {
+  id: string
+  x: number
+  y: number
+  rotation: number
+  lastProcessedInput: number
+}
+
+export interface WorldSnapshot {
+  tick: number
+  serverTime: number
+  players: PlayerSnapshot[]
+}

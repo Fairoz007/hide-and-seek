@@ -1,26 +1,36 @@
-import { Lobby } from "./Lobby.js"
+import { Room, SnapshotCallback } from "./Room.js"
 
 export class RoomManager {
-  private rooms = new Map<string, Lobby>()
+  private rooms = new Map<string, Room>()
+  private onSnapshot: SnapshotCallback
 
-  createRoom(hostId: string, hostName: string): Lobby {
-    const roomId = Math.random().toString(36).substring(2, 8).toUpperCase()
-    const lobby = new Lobby(roomId, hostId, hostName)
-    this.rooms.set(roomId, lobby)
-    return lobby
+  constructor(onSnapshot: SnapshotCallback) {
+    this.onSnapshot = onSnapshot
   }
 
-  getRoom(roomId: string): Lobby | undefined {
+  createRoom(hostId: string, hostName: string): Room {
+    const roomId = Math.random().toString(36).substring(2, 8).toUpperCase()
+    const room = new Room(roomId, hostId, hostName, this.onSnapshot)
+    this.rooms.set(roomId, room)
+    return room
+  }
+
+  getRoom(roomId: string): Room | undefined {
     return this.rooms.get(roomId)
   }
 
   removeRoom(roomId: string) {
-    this.rooms.delete(roomId)
+    const room = this.rooms.get(roomId)
+    if (room) {
+      room.stop()
+      this.rooms.delete(roomId)
+    }
   }
 
   sweep() {
     for (const [id, room] of this.rooms.entries()) {
       if (room.state.players.length === 0) {
+        room.stop()
         this.rooms.delete(id)
       }
     }

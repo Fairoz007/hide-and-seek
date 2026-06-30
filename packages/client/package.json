@@ -9,14 +9,14 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "howler": "^2.2.4",
     "phaser": "^3.80.1",
-    "three": "^0.169.0",
     "socket.io-client": "^4.8.0",
-    "howler": "^2.2.4"
+    "three": "^0.169.0"
   },
   "devDependencies": {
-    "vite": "^5.4.8",
+    "@types/howler": "^2.2.11",
     "@types/three": "^0.169.0",
-    "@types/howler": "^2.2.11"
+    "vite": "^5.4.8"
   }
 }

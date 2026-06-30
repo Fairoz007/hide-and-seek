@@ -20,9 +20,19 @@ export class LobbyScene extends Scene {
     
     this.playersGroup = this.add.group()
 
+    const startBtn = this.add.text(20, 400, "[ START GAME ]", { fontSize: "24px", color: "#00ff00" })
+    startBtn.setInteractive()
+    startBtn.on('pointerdown', () => {
+      this.socket.emit("lobby:ready")
+    })
+
     // Listen for room state updates
     this.socket.on("room:state", (state: RoomState) => {
-      this.updateLobby(state)
+      if (state.state === "ACTIVE") {
+        this.scene.start("GameScene")
+      } else {
+        this.updateLobby(state)
+      }
     })
   }
 

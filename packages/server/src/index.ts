@@ -1,7 +1,7 @@
 import { createServer } from "node:http"
 import express from "express"
 import { Server } from "socket.io"
-import { Events, roomCreateSchema, roomJoinSchema } from "@shadow-seek/shared"
+import { Events, roomCreateSchema, roomJoinSchema, moveInputSchema } from "@shadow-seek/shared"
 import { RoomManager } from "./rooms/RoomManager.js"
 
 const PORT = process.env.PORT || 3001
@@ -18,7 +18,9 @@ const io = new Server(httpServer, {
   pingTimeout: 8000,
 })
 
-const roomManager = new RoomManager()
+const roomManager = new RoomManager((roomId, snapshot) => {
+  io.to(roomId).emit(Events.STATE_SNAPSHOT, snapshot)
+})
 
 setInterval(() => roomManager.sweep(), 15000)
 
@@ -62,6 +64,31 @@ io.on("connection", (socket) => {
       io.to(currentRoomId).emit(Events.ROOM_STATE, room.state)
     } catch (e) {
       if (typeof callback === "function") callback({ success: false, error: String(e) })
+    }
+  })
+
+  // Start the game for testing purposes from Lobby
+  socket.on(Events.LOBBY_READY, () => {
+    if (currentRoomId) {
+      const room = roomManager.getRoom(currentRoomId)
+      if (room && room.state.players.find(p => p.id === socket.id)?.isHost) {
+        room.start()
+        io.to(currentRoomId).emit(Events.ROOM_STATE, room.state)
+      }
+    }
+  })
+
+  socket.on(Events.INPUT_MOVE, (payload) => {
+    try {
+      if (currentRoomId) {
+        const room = roomManager.getRoom(currentRoomId)
+        if (room) {
+          const input = moveInputSchema.parse(payload)
+          room.queueInput(socket.id, input)
+        }
+      }
+    } catch (e) {
+      // Ignore invalid inputs silently
     }
   })
 

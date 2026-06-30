@@ -2,6 +2,7 @@ import Phaser from "phaser"
 import { io, Socket } from "socket.io-client"
 import { BootScene } from "./scenes/BootScene.js"
 import { LobbyScene } from "./scenes/LobbyScene.js"
+import { GameScene } from "./scenes/GameScene.js"
 import { Events } from "@shadow-seek/shared"
 
 // Initialize Socket.IO connection
@@ -27,7 +28,7 @@ const config: Phaser.Types.Core.GameConfig = {
   height: 720,
   parent: "app",
   backgroundColor: "#0d1117",
-  scene: [BootScene, LobbyScene],
+  scene: [BootScene, LobbyScene, GameScene],
   physics: {
     default: "arcade",
     arcade: {
