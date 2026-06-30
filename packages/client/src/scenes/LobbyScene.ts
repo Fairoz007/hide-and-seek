@@ -28,7 +28,7 @@ export class LobbyScene extends Scene {
 
     // Listen for room state updates
     this.socket.on("room:state", (state: RoomState) => {
-      if (state.state === "ACTIVE") {
+      if (state.state === "ACTIVE" || state.state === "COUNTDOWN") {
         this.scene.start("GameScene")
       } else {
         this.updateLobby(state)
