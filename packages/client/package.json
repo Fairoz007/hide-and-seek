@@ -1,0 +1,22 @@
+{
+  "name": "@shadow-seek/client",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "phaser": "^3.80.1",
+    "three": "^0.169.0",
+    "socket.io-client": "^4.8.0",
+    "howler": "^2.2.4"
+  },
+  "devDependencies": {
+    "vite": "^5.4.8",
+    "@types/three": "^0.169.0",
+    "@types/howler": "^2.2.11"
+  }
+}
